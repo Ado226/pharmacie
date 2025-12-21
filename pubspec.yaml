@@ -42,6 +42,7 @@ dependencies:
   http: ^1.1.0
   shared_preferences: ^2.2.2
   sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.0
   path_provider: ^2.1.1
   supabase_flutter: 2.9.0
   #sign_in_with_apple: ^5.0.0
@@ -51,6 +52,28 @@ dependencies:
   intl: ^0.20.2
   geolocator: ^14.0.1
   url_launcher: ^6.3.1
+
+  # Clean Architecture packages
+  dartz: ^0.10.1
+  equatable: ^2.0.5
+  flutter_bloc: ^8.1.3
+  connectivity_plus: ^6.0.5
+  get_it: ^7.6.4
+  path: ^1.9.0
+  qr_flutter: ^4.1.0
+
+  # PDF generation and sharing
+  pdf: ^3.11.1
+  printing: ^5.13.3
+  open_filex: ^4.5.0
+  share_plus: ^10.1.2
+  permission_handler: ^11.3.1
+
+  # Notifications locales (sans Firebase)
+  flutter_local_notifications: ^18.0.1
+
+  # Socket.io pour temps réel
+  socket_io_client: ^2.0.3+1
 
 
 
