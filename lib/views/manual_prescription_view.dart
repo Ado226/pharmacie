@@ -1,15 +1,18 @@
 // Fichier: lib/views/manual_prescription_view.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pharmacie/views/pharmacy_responses_view.dart';
-import 'package:provider/provider.dart';
-import '../viewmodels/manual_prescription_viewmodel.dart';
-import '../models/medication_model.dart';
-import '../models/prescription_model.dart';
-import '../models/prescription_status.dart';  // Importer l'énumération centralisée
-import '../services/supabase_service.dart';  // Ajouter l'import du service Supabase
-import 'dart:math'; // Importer la bibliothèque Math pour générer des UUID
-import 'package:uuid/uuid.dart'; // Importer la bibliothèque UUID
+import 'package:pharmacie/views/pharmacy_responses_list_view.dart';
+import 'package:uuid/uuid.dart'; // Pour générer des UUID
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import '../core/config/api_config.dart';
+import '../features/auth/presentation/bloc/auth_bloc.dart';
+import '../features/auth/presentation/bloc/auth_state.dart';
+import '../features/auth/presentation/pages/login_page.dart';
+import '../features/prescription/presentation/bloc/prescription_bloc.dart';
 
 class ManualPrescriptionView extends StatelessWidget {
   final bool isEditing;
@@ -27,14 +30,11 @@ class ManualPrescriptionView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => ManualPrescriptionViewModel(),
-      child: ManualPrescriptionContent(
-        isEditing: isEditing,
-        prescriptionId: prescriptionId,
-        initialPatientName: initialPatientName,
-        initialProducts: initialProducts,
-      ),
+    return ManualPrescriptionContent(
+      isEditing: isEditing,
+      prescriptionId: prescriptionId,
+      initialPatientName: initialPatientName,
+      initialProducts: initialProducts,
     );
   }
 }
@@ -101,40 +101,27 @@ class _ManualPrescriptionContentState extends State<ManualPrescriptionContent> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFB), // Gris très clair moderne
+      backgroundColor: Colors.teal[50], // Teal-50
       appBar: AppBar(
-        leading: Container(
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+        leading: IconButton(
+          icon: Image.asset(
+            'assets/icone/en-arriere.png',
+            width: 24,
+            height: 24,
+            color: Colors.teal[700],
           ),
-          child: IconButton(
-            icon: Icon(
-              Icons.arrow_back_ios_new,
-              color: const Color(0xFF0F766E), // Teal-700
-              size: 20,
-            ),
-            onPressed: () => Navigator.pop(context),
-          ),
+          onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Saisie Manuelle',
           style: TextStyle(
             fontWeight: FontWeight.w600,
-            fontSize: 20,
-            color: Color(0xFF111827), // Gray-900
+            fontSize: 24,
+            color: Colors.teal[700],
             letterSpacing: -0.5,
           ),
         ),
-        backgroundColor: const Color(0xFFF8FAFB),
+        backgroundColor: Colors.teal[50],
         elevation: 0,
         centerTitle: false,
         toolbarHeight: 70,
@@ -169,8 +156,19 @@ class _ManualPrescriptionContentState extends State<ManualPrescriptionContent> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F766E),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0D9488), Color(0xFF5EEAD4)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
                           borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF0D9488).withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child: const Icon(
                           Icons.person_add,
@@ -270,7 +268,7 @@ class _ManualPrescriptionContentState extends State<ManualPrescriptionContent> {
                             color: Color(0xFF111827),
                           ),
                           decoration: InputDecoration(
-                            hintText: 'Ex: Jean Dupont',
+                            hintText: 'Ex: Adolphe FARMA',
                             hintStyle: TextStyle(
                               color: Colors.grey[400],
                               fontSize: 16,
@@ -351,14 +349,14 @@ class _ManualPrescriptionContentState extends State<ManualPrescriptionContent> {
                   height: 56,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF0F766E), Color(0xFF14B8A6)],
+                      colors: [Color(0xFF0D9488), Color(0xFF5EEAD4)],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                     ),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF0F766E).withOpacity(0.3),
+                        color: const Color(0xFF0D9488).withOpacity(0.3),
                         blurRadius: 12,
                         offset: const Offset(0, 6),
                       ),
@@ -368,28 +366,25 @@ class _ManualPrescriptionContentState extends State<ManualPrescriptionContent> {
                     onPressed: _navigateToProductAddPage,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.white,
                       shadowColor: Colors.transparent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      padding: EdgeInsets.zero,
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.check_circle_outline,
-                          color: Colors.white,
                           size: 20,
                         ),
-                        const SizedBox(width: 8),
-                        const Text(
+                        SizedBox(width: 8),
+                        Text(
                           'Continuer',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                            letterSpacing: 0.5,
                           ),
                         ),
                       ],
@@ -546,37 +541,94 @@ class _ProductAddViewState extends State<ProductAddView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA), // Arrière-plan légèrement grisé pour plus de contraste
+      backgroundColor: Colors.teal[50],
+      floatingActionButton: _productsList.isNotEmpty
+          ? Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              height: 56,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0D9488), Color(0xFF5EEAD4)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0D9488).withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _saveAndFinish,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.preview_rounded,
+                          size: 20,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Aperçu de l\'ordonnance',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.25),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${_productsList.length}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.teal[50],
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        leading: Container(
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFE6FFFA), // Teal ultra-léger
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: const Color(0xFF14B8A6).withOpacity(0.1),
-              width: 1,
-            ),
+        leading: IconButton(
+          icon: Image.asset(
+            'assets/icone/en-arriere.png',
+            width: 24,
+            height: 24,
+            color: Colors.teal[700],
           ),
-          child: IconButton(
-            icon: const Icon(
-              Icons.arrow_back_ios_new_rounded,
-              color: Color(0xFF0F766E),
-              size: 18,
-            ),
-            onPressed: () => Navigator.pop(context),
-            splashRadius: 20,
-          ),
+          onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Ajouter des produits',
           style: TextStyle(
             fontWeight: FontWeight.w700,
-            fontSize: 22,
-            color: Color(0xFF0F172A), // Couleur plus foncée pour meilleur contraste
+            fontSize: 24,
+            color: Colors.teal[700],
             letterSpacing: -0.6,
           ),
         ),
@@ -602,16 +654,9 @@ class _ProductAddViewState extends State<ProductAddView> {
         children: [
           // Section de recherche redesignée
           Container(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
             decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF14B8A6).withOpacity(0.04),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              color: Colors.teal[50],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -621,25 +666,19 @@ class _ProductAddViewState extends State<ProductAddView> {
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeOutCubic,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDFA),
-                    borderRadius: BorderRadius.circular(20),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: _searchController.text.isNotEmpty
                           ? const Color(0xFF14B8A6)
-                          : const Color(0xFFE5E7EB),
+                          : const Color(0xFFCBD5E1),
                       width: _searchController.text.isNotEmpty ? 2 : 1.5,
                     ),
-                    boxShadow: _searchController.text.isNotEmpty ? [
+                    boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF14B8A6).withOpacity(0.15),
+                        color: const Color(0xFF14B8A6).withOpacity(0.08),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
-                      ),
-                    ] : [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
@@ -647,20 +686,22 @@ class _ProductAddViewState extends State<ProductAddView> {
                     controller: _searchController,
                     onChanged: _filterProducts,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
                       color: Color(0xFF0F172A),
-                      height: 1.4,
+                      height: 1.2,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'Rechercher un produit ou un médicament...',
+                      hintText: 'Rechercher un produit...',
                       hintStyle: TextStyle(
                         color: const Color(0xFF64748B),
                         fontWeight: FontWeight.w400,
-                        fontSize: 16,
+                        fontSize: 14,
                       ),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                       prefixIcon: Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(10),
                         child: AnimatedSwitcher(
                           duration: const Duration(milliseconds: 200),
                           child: Icon(
@@ -698,10 +739,6 @@ class _ProductAddViewState extends State<ProductAddView> {
                       )
                           : null,
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 20,
-                      ),
                     ),
                   ),
                 ),
@@ -769,7 +806,8 @@ class _ProductAddViewState extends State<ProductAddView> {
                 children: [
                   // Section des résultats de recherche
                   Container(
-                    margin: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                    color: Colors.teal[50],
+                    margin: const EdgeInsets.fromLTRB(24, 8, 24, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -793,7 +831,7 @@ class _ProductAddViewState extends State<ProductAddView> {
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                               ),
-                              const SizedBox(width: 16),
+                              const SizedBox(width: 10),
                               const Expanded(
                                 child: Text(
                                   'Catalogue des produits',
@@ -829,21 +867,15 @@ class _ProductAddViewState extends State<ProductAddView> {
                           ),
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 10),
 
                         // Liste des produits avec design card amélioré
                         Container(
                           height: 400,
+                          width: double.infinity,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(20),
-                            color: Colors.white,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 16,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
+                            color: Colors.teal[50],
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(20),
@@ -870,7 +902,7 @@ class _ProductAddViewState extends State<ProductAddView> {
                     ),
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 10),
 
                   // Section des produits ajoutés redesignée
                   Container(
@@ -962,167 +994,58 @@ class _ProductAddViewState extends State<ProductAddView> {
                           ),
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 10),
 
-                        // Liste horizontale des produits ajoutés
+                        // Liste verticale des produits sélectionnés (style catalogue)
                         Container(
-                          height: 160,
+                          height: 300,
+                          width: double.infinity,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(20),
-                            color: Colors.white,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 16,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
+                            color: Colors.teal[50],
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(20),
                             child: _productsList.isEmpty
-                                ? _buildEmptyState(
-                              icon: Icons.add_shopping_cart_rounded,
-                              title: 'Aucun produit ajouté',
-                              subtitle: 'Sélectionnez des produits ci-dessus',
-                            )
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.shopping_cart_outlined,
+                                          size: 48,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          'Aucun produit sélectionné',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.grey.shade500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
                                 : ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              physics: const BouncingScrollPhysics(),
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _productsList.length,
-                              separatorBuilder: (context, index) =>
-                              const SizedBox(width: 12),
-                              itemBuilder: (context, index) {
-                                final product = _productsList[index];
-                                return _buildSelectedProductCard(product, index);
-                              },
-                            ),
+                                    physics: const BouncingScrollPhysics(),
+                                    padding: const EdgeInsets.all(16),
+                                    itemCount: _productsList.length,
+                                    separatorBuilder: (context, index) =>
+                                        const SizedBox(height: 8),
+                                    itemBuilder: (context, index) {
+                                      final product = _productsList[index];
+                                      return _buildSelectedProductCardVertical(product, index);
+                                    },
+                                  ),
                           ),
                         ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 100), // Espace pour le FloatingActionButton
                 ],
-              ),
-            ),
-          ),
-
-          // Bouton de validation redesigné avec animations avancées
-          Container(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 24,
-                  offset: const Offset(0, -8),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              top: false,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                width: double.infinity,
-                height: 60,
-                child: ElevatedButton(
-                  onPressed: _productsList.isNotEmpty ? _saveAndFinish : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _productsList.isNotEmpty
-                        ? const Color(0xFF14B8A6)
-                        : const Color(0xFFF1F5F9),
-                    foregroundColor: Colors.white,
-                    elevation: _productsList.isNotEmpty ? 8 : 0,
-                    shadowColor: const Color(0xFF14B8A6).withOpacity(0.4),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    splashFactory: InkRipple.splashFactory,
-                  ),
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: _productsList.isNotEmpty
-                        ? Row(
-                      key: const ValueKey('enabled'),
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.preview_rounded,
-                            size: 20,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        const Expanded(
-                          child: Text(
-                            'Aperçu de l\'ordonnance',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.3,
-                              color: Colors.white,
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.25),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Text(
-                            '${_productsList.length}',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: -0.1,
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                        : Row(
-                      key: const ValueKey('disabled'),
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.preview_outlined,
-                          size: 22,
-                          color: const Color(0xFF64748B),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Sélectionnez des produits',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.3,
-                            color: Color(0xFF64748B),
-                            height: 1.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               ),
             ),
           ),
@@ -1252,13 +1175,17 @@ class _ProductAddViewState extends State<ProductAddView> {
                 // Bouton d'ajout avec animation
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10B981),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0D9488), Color(0xFF5EEAD4)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF10B981).withOpacity(0.3),
+                        color: const Color(0xFF0D9488).withOpacity(0.3),
                         blurRadius: 8,
-                        offset: const Offset(0, 2),
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
@@ -1290,201 +1217,187 @@ class _ProductAddViewState extends State<ProductAddView> {
 
   ////////////////////
 
-// Widget pour les produits sélectionnés - Version améliorée
+// Widget pour les produits sélectionnés - Version compacte avec croix
   Widget _buildSelectedProductCard(Map<String, dynamic> product, int index) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      width: 240,
-      margin: const EdgeInsets.only(right: 16),
+    return Container(
+      width: 140,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF14B8A6), // Teal-500
-          width: 2,
+          color: const Color(0xFF14B8A6),
+          width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF14B8A6).withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: const Color(0xFF14B8A6).withOpacity(0.04),
-            blurRadius: 6,
+            color: const Color(0xFF14B8A6).withOpacity(0.1),
+            blurRadius: 4,
             offset: const Offset(0, 2),
-            spreadRadius: 0,
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: Column(
-          children: [
-            // En-tête avec dégradé subtil
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFFF0FDFA), // Teal-50
-                    const Color(0xFFCCFBF1), // Teal-100
-                  ],
+      child: Stack(
+        children: [
+          // Contenu de la carte
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 24, 8),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF14B8A6),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.medication_rounded,
+                    color: Colors.white,
+                    size: 14,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        product['name'],
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                          color: Color(0xFF0F172A),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        product['patientType'] ?? 'Adulte',
+                        style: const TextStyle(
+                          color: Color(0xFF065F46),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Bouton croix en haut à droite
+          Positioned(
+            top: 2,
+            right: 2,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _productsList.removeAt(index);
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFDC2626),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.close,
+                  color: Colors.white,
+                  size: 12,
                 ),
               ),
-              child: Row(
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+// Widget pour les produits sélectionnés - Version verticale avec icône poubelle
+  Widget _buildSelectedProductCardVertical(Map<String, dynamic> product, int index) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.grey.shade100,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            // Icône avec arrière-plan coloré
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF14B8A6).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.medication_rounded,
+                color: Color(0xFF14B8A6),
+                size: 24,
+              ),
+            ),
+
+            const SizedBox(width: 16),
+
+            // Contenu principal
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icône moderne
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF14B8A6),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF14B8A6).withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.medication_liquid_rounded,
-                      color: Colors.white,
-                      size: 20,
+                  Text(
+                    product['name'],
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      color: Color(0xFF1F2937),
+                      letterSpacing: -0.2,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  // Titre du produit
-                  Expanded(
-                    child: Text(
-                      product['name'],
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                        color: Color(0xFF0F172A), // Slate-900
-                        letterSpacing: -0.5,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 4),
+                  Text(
+                    product['patientType'] ?? 'Adulte',
+                    style: const TextStyle(
+                      color: Color(0xFF065F46),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Contenu principal
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Description
-                    Text(
-                      product['description'] ?? 'Aucune description disponible',
-                      style: const TextStyle(
-                        color: Color(0xFF64748B), // Slate-500
-                        fontSize: 14,
-                        height: 1.5,
-                        fontWeight: FontWeight.w400,
-                      ),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+            const SizedBox(width: 12),
 
-                    const Spacer(),
-
-                    // Badge du type de patient
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFECFDF5), // Green-50
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: const Color(0xFF10B981).withOpacity(0.2),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF10B981),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Pour: ${product['patientType']}',
-                            style: const TextStyle(
-                              color: Color(0xFF065F46), // Green-800
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Bouton de suppression moderne
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: SizedBox(
-                width: double.infinity,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      // Animation de sortie
-                      setState(() {
-                        _productsList.removeAt(index);
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF2F2), // Red-50
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: const Color(0xFFFECACA), // Red-200
-                          width: 1,
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.delete_outline_rounded,
-                            color: Color(0xFFDC2626), // Red-600
-                            size: 18,
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            'Retirer',
-                            style: TextStyle(
-                              color: Color(0xFFDC2626),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+            // Bouton poubelle pour supprimer
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _productsList.removeAt(index);
+                  });
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    color: Color(0xFFDC2626),
+                    size: 24,
                   ),
                 ),
               ),
@@ -1514,18 +1427,20 @@ class _ProductAddViewState extends State<ProductAddView> {
               topRight: Radius.circular(24),
             ),
           ),
-          child: Column(
+          child: Stack(
             children: [
-              // Handle indicator
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                width: 48,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0), // Slate-200
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+              Column(
+                children: [
+                  // Handle indicator
+                  Container(
+                    margin: const EdgeInsets.only(top: 12),
+                    width: 48,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE2E8F0), // Slate-200
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
 
               // En-tête moderne avec dégradé
               Container(
@@ -1664,6 +1579,48 @@ class _ProductAddViewState extends State<ProductAddView> {
                         Icons.info_outlined,
                       ),
                     ],
+                  ),
+                ),
+              ),
+                ],
+              ),
+              // Bouton flottant + pour ajouter le produit
+              Positioned(
+                bottom: 24,
+                right: 24,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0D9488), Color(0xFF5EEAD4)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0D9488).withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showPatientTypeSelection(product);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Icon(
+                          Icons.add_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -2041,7 +1998,7 @@ class _ProductAddViewState extends State<ProductAddView> {
           borderRadius: BorderRadius.circular(12),
         ),
         margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
+        duration: const Duration(milliseconds: 500),
         elevation: 8,
       ),
     );
@@ -2130,61 +2087,55 @@ class _PrescriptionPreviewViewState extends State<PrescriptionPreviewView>
     final String formattedDate = '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
 
     return Scaffold(
-      backgroundColor: backgroundGrey,
+      backgroundColor: Colors.teal[50],
       appBar: _buildModernAppBar(context),
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: SlideTransition(
           position: _slideAnimation,
-          child: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildPrescriptionHeader(formattedDate),
-                      const SizedBox(height: 32),
-                      _buildProductsSection(),
-                      const SizedBox(height: 32),
-                      _buildNotesSection(),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
-                ),
-              ),
-              _buildActionButton(context),
-            ],
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildPrescriptionHeader(formattedDate),
+                const SizedBox(height: 32),
+                _buildProductsSection(),
+                const SizedBox(height: 32),
+                _buildNotesSection(),
+                const SizedBox(height: 100), // Espace pour le bouton flottant
+              ],
+            ),
           ),
         ),
       ),
+      floatingActionButton: _buildFloatingActionButton(context),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 
   PreferredSizeWidget _buildModernAppBar(BuildContext context) {
     return AppBar(
-      backgroundColor: cardWhite,
+      backgroundColor: Colors.teal[50],
       elevation: 0,
+      surfaceTintColor: Colors.transparent,
       systemOverlayStyle: SystemUiOverlayStyle.dark,
-      leading: Container(
-        margin: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: backgroundGrey,
-          borderRadius: BorderRadius.circular(12),
+      leading: IconButton(
+        icon: Image.asset(
+          'assets/icone/en-arriere.png',
+          width: 24,
+          height: 24,
+          color: Colors.teal[700],
         ),
-        child: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: darkTeal, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+        onPressed: () => Navigator.pop(context),
       ),
-      title: const Text(
+      title: Text(
         'Aperçu de l\'ordonnance',
         style: TextStyle(
           fontWeight: FontWeight.w700,
-          fontSize: 20,
-          color: textPrimary,
-          letterSpacing: -0.5,
+          fontSize: 24,
+          color: Colors.teal[700],
+          letterSpacing: -0.6,
         ),
       ),
       centerTitle: false,
@@ -2192,7 +2143,15 @@ class _PrescriptionPreviewViewState extends State<PrescriptionPreviewView>
         preferredSize: const Size.fromHeight(1),
         child: Container(
           height: 1,
-          color: borderLight,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF14B8A6).withOpacity(0.1),
+                const Color(0xFF14B8A6).withOpacity(0.05),
+                Colors.transparent,
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -2611,75 +2570,342 @@ class _PrescriptionPreviewViewState extends State<PrescriptionPreviewView>
     );
   }
 
-  Widget _buildActionButton(BuildContext context) {
+  Widget _buildFloatingActionButton(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      width: double.infinity,
+      height: 56,
       decoration: BoxDecoration(
-        color: cardWhite,
+        gradient: LinearGradient(
+          colors: [primaryTeal, lightTeal],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 20,
-            offset: const Offset(0, -8),
-            spreadRadius: 0,
+            color: primaryTeal.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: SafeArea(
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : () => _handleValidation(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryTeal,
-              foregroundColor: cardWhite,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              disabledBackgroundColor: textSecondary,
-            ),
-            child: _isLoading
-                ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(cardWhite),
-              ),
-            )
-                : const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle_outline, size: 22),
-                SizedBox(width: 12),
-                Text(
-                  'Valider l\'ordonnance',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ],
-            ),
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : () => _handleValidation(context),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: cardWhite,
+          shadowColor: Colors.transparent,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
           ),
+          disabledBackgroundColor: textSecondary,
+        ),
+        child: _isLoading
+            ? const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(cardWhite),
+          ),
+        )
+            : const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline, size: 22),
+            SizedBox(width: 12),
+            Text(
+              'Valider l\'ordonnance',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Future<void> _handleValidation(BuildContext context) async {
+    // Import nécessaire pour AuthBloc
+    final authBloc = BlocProvider.of<AuthBloc>(context);
+    final authState = authBloc.state;
+
+    // Vérifier si l'utilisateur est connecté
+    if (authState is! LoginSuccess && authState is! RegisterSuccess) {
+      // Afficher un dialog demandant à l'utilisateur de se connecter
+      final shouldProceed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D9488).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.lock_person,
+                  color: Color(0xFF0D9488),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Authentification requise',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Vous devez être connecté pour créer une ordonnance. Souhaitez-vous vous connecter ou créer un compte?',
+            style: TextStyle(
+              fontSize: 16,
+              color: Color(0xFF64748B),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text(
+                'Annuler',
+                style: TextStyle(
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0D9488), Color(0xFF5EEAD4)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0D9488).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Se connecter',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldProceed == true) {
+        // Naviguer vers la page de login
+        // Importez LoginPage en haut du fichier
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const LoginPage(),
+          ),
+        );
+
+        // Si l'utilisateur s'est connecté avec succès, réessayer la validation
+        if (result == true && mounted) {
+          _handleValidation(context);
+        }
+      }
+      return;
+    }
+
+    // L'utilisateur est connecté, procéder à la validation
     setState(() => _isLoading = true);
 
     try {
       // Feedback haptique
       HapticFeedback.lightImpact();
 
-      // Simulation du traitement (remplacez par votre logique réelle)
-      await Future.delayed(const Duration(milliseconds: 1500));
+      // Récupérer le token de l'utilisateur connecté
+      final token = (authState is LoginSuccess)
+          ? authState.token
+          : (authState as RegisterSuccess).token;
+
+      // Construire les données de l'ordonnance pour le backend
+      final Map<String, dynamic> prescriptionData = {
+        'type_commande': 'saisie_manuelle',
+        'nom_patient': widget.patientName, // Ajouter le nom du patient
+        'localisation': {
+          'latitude': 0.0,
+          'longitude': 0.0,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+        'produits': widget.productsList.map((product) {
+          return {
+            'produit_id': int.tryParse(product['id'] ?? '0') ?? 0,
+            'nom_produit_personnalise': product['name'] ?? '',
+            'quantite': 1,
+            'age_cible': (product['patientType'] ?? 'Adulte').toLowerCase(),
+          };
+        }).toList(),
+      };
+
+      // Debug: Afficher les données envoyées
+      print('📤 Données envoyées au backend:');
+      print(json.encode(prescriptionData));
+
+      // Envoyer l'ordonnance au backend via HTTP POST
+      // Le backend attend les données dans un champ 'data' comme pour les ordonnances photo
+      final response = await http.post(
+        Uri.parse(ApiConfig.commandesUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'data': json.encode(prescriptionData), // Envoyer dans le champ 'data'
+        }),
+      );
+
+      // Debug: Afficher la réponse
+      print('📥 Statut de la réponse: ${response.statusCode}');
+      print('📥 Corps de la réponse: ${response.body}');
+
+      // Gérer le cas d'un token invalide ou expiré (401 Unauthorized)
+      if (response.statusCode == 401) {
+        if (!mounted) return;
+
+        // Déconnecter l'utilisateur en supprimant le token expiré
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(ApiConfig.tokenKey);
+        await prefs.remove(ApiConfig.userIdKey);
+
+        // Afficher un message et demander de se reconnecter
+        final shouldLogin = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orange,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Session expirée',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: const Text(
+              'Votre session a expiré. Vous devez vous reconnecter pour continuer.',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFF64748B),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text(
+                  'Annuler',
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0D9488), Color(0xFF5EEAD4)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0D9488).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Se reconnecter',
+                    style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+
+        if (shouldLogin == true) {
+          // Naviguer vers la page de login
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const LoginPage(),
+            ),
+          );
+
+          // Si l'utilisateur s'est connecté avec succès, réessayer la validation
+          if (result == true && mounted) {
+            _handleValidation(context);
+          }
+        }
+        return;
+      }
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Erreur lors de l\'enregistrement: ${response.body}');
+      }
 
       if (!mounted) return;
 
@@ -2700,11 +2926,22 @@ class _PrescriptionPreviewViewState extends State<PrescriptionPreviewView>
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 2),
         ),
       );
 
-      // Navigation (remplacez par votre logique de navigation)
-      // Navigator.pushReplacement(context, ...);
+      // Attendre un peu pour que l'utilisateur voie le message de succès
+      await Future.delayed(const Duration(milliseconds: 1500));
+
+      if (!mounted) return;
+
+      // Rediriger vers la page des réponses des pharmacies
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => const PharmacyResponsesListView(),
+        ),
+        (route) => route.isFirst,
+      );
 
     } catch (e) {
       if (!mounted) return;

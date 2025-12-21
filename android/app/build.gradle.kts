@@ -13,6 +13,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // Activer le core library desugaring pour flutter_local_notifications
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -28,6 +30,8 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // MultiDex pour les applications avec beaucoup de méthodes
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -41,4 +45,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Core library desugaring pour supporter les APIs Java 8+ sur les anciennes versions Android
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }

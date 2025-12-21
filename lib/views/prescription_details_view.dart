@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'manual_prescription_view.dart';
 import 'pharmacy_responses_view.dart';
 import '../models/prescription_status.dart';
+import '../core/config/api_config.dart';
 
 class PrescriptionDetailsView extends StatelessWidget {
   final String id;
   final String patientName;
   final DateTime date;
   final List<dynamic> products;
+  final String? photoUrl;
 
   const PrescriptionDetailsView({
     Key? key,
@@ -15,10 +17,25 @@ class PrescriptionDetailsView extends StatelessWidget {
     required this.patientName,
     required this.date,
     required this.products,
+    this.photoUrl,
   }) : super(key: key);
+
+  // Construire l'URL complète de l'image en utilisant ApiConfig centralisé
+  String? _getFullImageUrl() {
+    if (photoUrl == null || photoUrl!.isEmpty) return null;
+    return ApiConfig.buildImageUrl(photoUrl!);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final fullImageUrl = _getFullImageUrl();
+
+    // Debug: Afficher les données reçues
+    print('🔍 Détails ordonnance ID: $id');
+    print('🔍 Nom patient: $patientName');
+    print('🔍 Nombre de produits: ${products.length}');
+    print('🔍 Produits: $products');
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
@@ -91,31 +108,123 @@ class PrescriptionDetailsView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
-                // Nombre total de produits
-                Text(
-                  'Médicaments (${products.length})',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal[700],
+
+                // Si c'est une ordonnance photo, afficher l'image
+                if (fullImageUrl != null) ...[
+                  const Text(
+                    'Photo de l\'ordonnance',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      fullImageUrl,
+                      height: 300,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          height: 300,
+                          color: Colors.grey[200],
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.broken_image, size: 60, color: Colors.grey[400]),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Image non disponible',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'URL: $fullImageUrl',
+                                style: TextStyle(color: Colors.grey[500], fontSize: 10),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          height: 300,
+                          color: Colors.grey[200],
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Nombre total de produits
+                if (products.isNotEmpty)
+                  Text(
+                    'Médicaments (${products.length})',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal[700],
+                    ),
+                  ),
               ],
             ),
           ),
-          
+
           // Liste des produits
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: products.length,
-              itemBuilder: (context, index) {
-                final product = products[index];
-                return _buildProductItem(product);
-              },
+          if (products.isEmpty)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.inbox_outlined, size: 80, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Aucun produit disponible',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Les détails des produits ne sont pas chargés',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[500],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: products.length,
+                itemBuilder: (context, index) {
+                  final product = products[index];
+                  return _buildProductItem(product);
+                },
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -162,20 +271,49 @@ class PrescriptionDetailsView extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    product['name'],
+                    product['name'] ?? 'Médicament',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Quantité: ${product['quantity']}',
-                    style: TextStyle(
-                      color: Colors.grey[700],
-                      fontSize: 14,
+                  if (product['description'] != null && product['description'].isNotEmpty)
+                    Text(
+                      product['description'],
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
+                  if (product['dosage'] != null && product['dosage'].isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Posologie: ${product['dosage']}',
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                  if (product['patientType'] != null) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        product['patientType'],
+                        style: TextStyle(
+                          color: Colors.teal[700],
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -306,6 +444,7 @@ class PrescriptionDetailsView extends StatelessWidget {
                               builder: (context) => PharmacyResponsesView(
                                 patientName: patientName,
                                 productsList: List<Map<String, dynamic>>.from(products),
+                                commandeId: int.tryParse(id), // Passer le commandeId pour charger les réponses depuis l'API
                               ),
                             ),
                           );

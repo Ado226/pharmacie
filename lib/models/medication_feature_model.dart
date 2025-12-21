@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 class MedicationFeatureModel {
   final String title;
   final Widget Function() routeBuilder;
-  final String iconAsset;
+  final String? iconAsset;
+  final IconData? icon;
 
   MedicationFeatureModel({
     required this.title,
     required this.routeBuilder,
-    required this.iconAsset
+    this.iconAsset,
+    this.icon,
   });
 }

@@ -1,5 +1,5 @@
 // Fichier: lib/models/pharmacy_response_model.dart
-import 'medication_model.dart';
+import '../features/prescription/data/models/medication_model.dart';
 
 class PharmacyModel {
   final String id;

@@ -131,10 +131,11 @@ class _AmbulanceViewState extends State<AmbulanceView>
               ),
             ],
           ),
-          child: Icon(
-            Icons.arrow_back_ios_rounded,
+          child: Image.asset(
+            'assets/icone/en-arriere.png',
+            width: 24,
+            height: 24,
             color: AmbulanceColors.primary,
-            size: 20,
           ),
         ),
         onPressed: () => Navigator.pop(context),

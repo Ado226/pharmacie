@@ -1,0 +1,391 @@
+// Fichier: lib/services/api_service.dart
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../services/database_config.dart';
+import '../models/prescription_model.dart';
+import '../models/medication_model.dart';
+import '../services/local_database_service.dart'; // Importer le service de base de données locale
+
+class ApiService {
+  // Singleton pattern
+  static final ApiService _instance = ApiService._internal();
+  factory ApiService() => _instance;
+  ApiService._internal();
+
+  // Headers pour les requêtes HTTP
+  Map<String, String> _headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
+
+  // Token d'authentification
+  String? _authToken;
+
+  // Méthode pour définir un token d'authentification
+  void setAuthToken(String token) {
+    _authToken = token;
+    _headers['Authorization'] = 'Bearer $token';
+  }
+
+  // Méthode pour retirer le token
+  void clearAuthToken() {
+    _authToken = null;
+    _headers.remove('Authorization');
+  }
+
+  // Méthode générique pour effectuer une requête GET
+  Future<dynamic> get(String endpoint) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${DatabaseConfig.apiUrl}/$endpoint'),
+        headers: _headers,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      print('Erreur lors de la requête GET: $e');
+      rethrow;
+    }
+  }
+
+  // Méthode générique pour effectuer une requête POST
+  Future<dynamic> post(String endpoint, Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${DatabaseConfig.apiUrl}/$endpoint'),
+        headers: _headers,
+        body: jsonEncode(data),
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      print('Erreur lors de la requête POST: $e');
+      rethrow;
+    }
+  }
+
+  // Méthode générique pour effectuer une requête PUT
+  Future<dynamic> put(String endpoint, Map<String, dynamic> data) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${DatabaseConfig.apiUrl}/$endpoint'),
+        headers: _headers,
+        body: jsonEncode(data),
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      print('Erreur lors de la requête PUT: $e');
+      rethrow;
+    }
+  }
+
+  // Méthode générique pour effectuer une requête DELETE
+  Future<dynamic> delete(String endpoint) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('${DatabaseConfig.apiUrl}/$endpoint'),
+        headers: _headers,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      print('Erreur lors de la requête DELETE: $e');
+      rethrow;
+    }
+  }
+
+  // Méthode pour gérer les réponses HTTP
+  dynamic _handleResponse(http.Response response) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (response.body.isEmpty) return null;
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Erreur HTTP: ${response.statusCode}, ${response.body}');
+    }
+  }
+
+  // Méthode pour tester la connexion au backend Node.js
+  Future<bool> testConnection() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${DatabaseConfig.apiUrl}/health'),
+        headers: _headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('Connexion au backend réussie: ${data['status']}');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Erreur lors du test de connexion au backend: $e');
+      return false;
+    }
+  }
+
+  // ========== AUTHENTIFICATION ==========
+
+  // Inscription client
+  Future<Map<String, dynamic>> registerClient({
+    required String nom,
+    required String prenom,
+    required String email,
+    required String motDePasse,
+    required String telephone,
+  }) async {
+    try {
+      final response = await post('auth/client/register', {
+        'nom': nom,
+        'prenom': prenom,
+        'email': email,
+        'mot_de_passe': motDePasse,
+        'telephone': telephone,
+      });
+      return response;
+    } catch (e) {
+      print('Erreur lors de l\'inscription: $e');
+      rethrow;
+    }
+  }
+
+  // Connexion client
+  Future<Map<String, dynamic>> loginClient({
+    required String email,
+    required String motDePasse,
+  }) async {
+    try {
+      final response = await post('auth/client/login', {
+        'email': email,
+        'mot_de_passe': motDePasse,
+      });
+
+      // Sauvegarder le token si présent
+      if (response['token'] != null) {
+        setAuthToken(response['token']);
+      }
+
+      return response;
+    } catch (e) {
+      print('Erreur lors de la connexion: $e');
+      rethrow;
+    }
+  }
+
+  // ========== COMMANDES (PRESCRIPTIONS) ==========
+
+  // Créer une commande/ordonnance
+  Future<Map<String, dynamic>> createCommande({
+    required String typeCommande,
+    required double latitude,
+    required double longitude,
+    List<Map<String, dynamic>>? produits,
+    String? ordonnancePhotoUrl,
+  }) async {
+    try {
+      final data = {
+        'type_commande': typeCommande,
+        'localisation_client_latitude': latitude,
+        'localisation_client_longitude': longitude,
+        'localisation_timestamp': DateTime.now().toIso8601String(),
+      };
+
+      if (produits != null && produits.isNotEmpty) {
+        data['produits'] = produits;
+      }
+
+      if (ordonnancePhotoUrl != null) {
+        data['ordonnance_photo_url'] = ordonnancePhotoUrl;
+      }
+
+      final response = await post('client/commandes', data);
+      return response;
+    } catch (e) {
+      print('Erreur lors de la création de la commande: $e');
+      rethrow;
+    }
+  }
+
+  // Récupérer toutes les commandes du client connecté
+  Future<List<dynamic>> getCommandesClient() async {
+    try {
+      final response = await get('client/commandes');
+      return response as List<dynamic>;
+    } catch (e) {
+      print('Erreur lors de la récupération des commandes: $e');
+      return [];
+    }
+  }
+
+  // Récupérer le statut d'une commande
+  Future<Map<String, dynamic>?> getCommandeStatus(int commandeId) async {
+    try {
+      final response = await get('client/commandes/$commandeId/status');
+      return response as Map<String, dynamic>;
+    } catch (e) {
+      print('Erreur lors de la récupération du statut de la commande: $e');
+      return null;
+    }
+  }
+
+  // Méthodes spécifiques pour les ordonnances (compatibilité)
+  Future<List<PrescriptionModel>> getPrescriptions() async {
+    try {
+      final commandes = await getCommandesClient();
+
+      // Convertir les commandes en prescriptions
+      return commandes.map((commande) => _convertCommandeToPrescription(commande)).toList();
+    } catch (e) {
+      print('Erreur lors de la récupération des prescriptions: $e');
+      return [];
+    }
+  }
+
+  Future<PrescriptionModel?> getPrescription(String id) async {
+    try {
+      final commande = await getCommandeStatus(int.parse(id));
+
+      if (commande != null) {
+        return _convertCommandeToPrescription(commande);
+      }
+
+      return null;
+    } catch (e) {
+      print('Erreur lors de la récupération de la prescription: $e');
+      return null;
+    }
+  }
+
+  Future<String> createPrescription(PrescriptionModel prescription) async {
+    try {
+      // Convertir la prescription en commande
+      final produits = prescription.medications.map((medItem) => {
+        'produit_id': int.tryParse(medItem.medication.id) ?? 0,
+        'quantite': 1,
+        'prix_unitaire': 0.0,
+      }).toList();
+
+      final response = await createCommande(
+        typeCommande: 'saisie_manuelle',
+        latitude: 0.0, // À obtenir depuis le GPS
+        longitude: 0.0, // À obtenir depuis le GPS
+        produits: produits,
+      );
+
+      // Sauvegarder l'ordonnance localement
+      final LocalDatabaseService _localDbService = LocalDatabaseService();
+      await _localDbService.insertPrescription(prescription);
+
+      return response['commande']['id'].toString();
+    } catch (e) {
+      print('Erreur lors de la création de la prescription: $e');
+
+      // En cas d'erreur, sauvegarder quand même localement
+      final LocalDatabaseService _localDbService = LocalDatabaseService();
+      await _localDbService.insertPrescription(prescription);
+
+      return prescription.id;
+    }
+  }
+
+  Future<bool> updatePrescription(String id, PrescriptionModel prescription) async {
+    try {
+      // Mise à jour non supportée par le backend pour le moment
+      final LocalDatabaseService _localDbService = LocalDatabaseService();
+      await _localDbService.updatePrescription(prescription);
+      return true;
+    } catch (e) {
+      print('Erreur lors de la mise à jour de l\'ordonnance: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deletePrescription(String id) async {
+    try {
+      // Suppression non supportée par le backend pour le moment
+      final LocalDatabaseService _localDbService = LocalDatabaseService();
+      await _localDbService.deletePrescription(id);
+      return true;
+    } catch (e) {
+      print('Erreur lors de la suppression de l\'ordonnance: $e');
+      return false;
+    }
+  }
+
+  // ========== MÉDICAMENTS ==========
+
+  // Récupérer tous les médicaments (nécessite token admin pour certains backends)
+  Future<List<MedicationModel>> getMedications() async {
+    try {
+      // Utiliser la base de données locale pour les médicaments
+      final LocalDatabaseService _localDbService = LocalDatabaseService();
+      return await _localDbService.getAllMedications();
+    } catch (e) {
+      print('Erreur lors de la récupération des médicaments: $e');
+      return [];
+    }
+  }
+
+  Future<MedicationModel?> getMedication(String id) async {
+    try {
+      // Utiliser la base de données locale
+      final LocalDatabaseService _localDbService = LocalDatabaseService();
+      return await _localDbService.getMedicationById(id);
+    } catch (e) {
+      print('Erreur lors de la récupération du médicament $id: $e');
+      return null;
+    }
+  }
+
+  // Méthodes pour les réponses des pharmacies
+  Future<List<dynamic>> getPharmacyResponses(String prescriptionId) async {
+    try {
+      // Cette fonctionnalité sera implémentée via le backend
+      print('Récupération des réponses pharmacies pour la commande $prescriptionId');
+      return [];
+    } catch (e) {
+      print('Erreur lors de la récupération des réponses des pharmacies: $e');
+      return [];
+    }
+  }
+
+  // ========== MÉTHODES DE CONVERSION ==========
+
+  PrescriptionModel _convertCommandeToPrescription(Map<String, dynamic> commande) {
+    List<PrescriptionMedicationItem> medications = [];
+
+    // Convertir les produits de la commande en médicaments
+    if (commande['CommandeProduits'] != null) {
+      final produits = commande['CommandeProduits'] as List<dynamic>;
+
+      for (var produit in produits) {
+        final produitData = produit['Produit'];
+        if (produitData != null) {
+          final medication = MedicationModel(
+            id: produitData['id'].toString(),
+            name: produitData['nom'] ?? '',
+            description: produitData['description'] ?? '',
+            form: produitData['forme'] ?? 'Comprimé',
+            dosage: produitData['dosage'] ?? 'N/A',
+            usage: produitData['mode_emploi'] ?? 'N/A',
+            contraindications: produitData['contre_indications'] ?? '',
+            imageUrl: produitData['image_url'] ?? '',
+          );
+
+          medications.add(PrescriptionMedicationItem(
+            medication: medication,
+            patientType: PatientType.adulte, // Par défaut
+          ));
+        }
+      }
+    }
+
+    return PrescriptionModel(
+      id: commande['id'].toString(),
+      name: 'Commande #${commande['id']}',
+      createdAt: DateTime.parse(commande['created_at']),
+      medications: medications,
+    );
+  }
+}
